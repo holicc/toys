@@ -24,7 +24,7 @@ func main() {
 	rgx := regexp.MustCompile("rb/(.*?)_1920x1080.jpg")
 	imageName := rgx.FindSubmatch(all)[1]
 	//
-	sPath := storePath(string(imageName)+"_1920x1080.jpg")
+	sPath := storePath(string(imageName) + "_1920x1080.jpg")
 	if _, err := os.Stat(sPath); os.IsNotExist(err) {
 		response, _ := http.Get(fmt.Sprintf(UHD_API, imageName))
 		defer response.Body.Close()
@@ -50,8 +50,8 @@ func storePath(imageName string) string {
 	storePath := path.Join(homeDir, "Pictures")
 	goos := runtime.GOOS
 	if goos == "windows" {
-		return path.Join(storePath, "Saved Pictures",imageName)
+		return path.Join(storePath, "Saved Pictures", imageName)
 	} else {
-		return path.Join(storePath,imageName)
+		return path.Join(storePath, imageName)
 	}
 }
