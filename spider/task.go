@@ -45,14 +45,9 @@ type Task struct {
 	//
 	Values []interface{}
 	//
-	refresh   bool
-	distinct  bool
-	init      bool
-	sorted    bool
-	functions []func()
-	//
 	done bool
-	dC   chan struct{}
+	//
+	functions []func()
 }
 
 func NewTask(req *http.Request, selector string) (*Task, error) {
@@ -61,7 +56,6 @@ func NewTask(req *http.Request, selector string) (*Task, error) {
 		Pipelines:    make([]Pipeline, 0),
 		functions:    make([]func(), 0),
 		MainSelector: selector,
-		dC:           make(chan struct{}, 1),
 	}, nil
 }
 
@@ -98,6 +92,26 @@ func (t *Task) Map(apply Apply) {
 	})
 }
 
+func (t *Task) Pipeline(p Pipeline) {
+	t.Pipelines = append(t.Pipelines, p)
+}
+
+func (t *Task) Sort(sort Sort) {
+	t.functions = append(t.functions, func() {
+		values := t.Values
+		//TODO improvement
+		for i := range values {
+			for j := i + 1; j < len(values); j++ {
+				if sort(values[i], values[j]) > 1 {
+					t := values[i]
+					values[i] = values[j]
+					values[j] = t
+				}
+			}
+		}
+	})
+}
+
 func (t *Task) Collect() []interface{} {
 	if t.done {
 		return t.Values
@@ -113,29 +127,6 @@ func (t *Task) Collect() []interface{} {
 	}
 }
 
-func (t *Task) Pipeline(p Pipeline) {
-	t.Pipelines = append(t.Pipelines, p)
-}
-
-func (t *Task) Sort(sort Sort) {
-	t.functions = append(t.functions, func() {
-		if t.sorted {
-			return
-		}
-		values := t.Values
-		//TODO improvement
-		for i := range values {
-			for j := i + 1; j < len(values); j++ {
-				if sort(values[i], values[j]) > 1 {
-					t := values[i]
-					values[i] = values[j]
-					values[j] = t
-				}
-			}
-		}
-	})
-}
-
 func (t *Task) RepeatWithBreak(duration time.Duration, f func(t *Task) bool) {
 	if t.done {
 		return
@@ -149,22 +140,27 @@ func (t *Task) RepeatWithBreak(duration time.Duration, f func(t *Task) bool) {
 				break
 			}
 			//
-			t.doFunc()
-			go t.activePipelines()
+			t.process()
 			//
 		}
-		t.finish()
 	}()
 }
 
-func (t *Task) Wait() {
-	<-t.dC
+func (t *Task) process() bool {
+	//
+	t.fetchSource()
+	//
+	t.doFunc()
+	//
+	go t.activePipelines()
+	//
+	t.finish()
+	//
+	return t.done
 }
 
 func (t *Task) finish() {
 	t.done = true
-	t.dC <- struct{}{}
-	close(t.dC)
 }
 
 func (t *Task) activePipelines() {
@@ -177,10 +173,6 @@ func (t *Task) activePipelines() {
 
 func (t *Task) doFunc() {
 	//
-	if !t.init {
-		t.fetchSource()
-	}
-	//
 	for _, f := range t.functions {
 		f()
 	}
@@ -192,7 +184,6 @@ func (t *Task) doFunc() {
 			}
 			t.Page = page
 			t.Request.URL = parse
-			t.init = false
 		}
 	}
 }
@@ -212,5 +203,4 @@ func (t *Task) fetchSource() {
 	selection := document.Find(t.MainSelector)
 	t.Response = response
 	t.Selection = selection
-	t.init = true
 }

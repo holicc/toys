@@ -16,6 +16,8 @@ type V2ex struct {
 }
 
 func main() {
+	engine := spider.NewEngine(16)
+	//
 	req, _ := http.NewRequest("GET", "https://www.v2ex.com/recent", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  "PB3_SESSION",
@@ -31,22 +33,24 @@ func main() {
 	})
 	task, _ := spider.NewTask(req, "div.item")
 	//
-	task.NextURL = Next
+	task.Map(MapToV2ex)
+	task.NextURL = NextURL
 	//
-	task.Map(MapToStruct)
-	task.Pipeline(spider.DefaultPipeline)
+	err := engine.AddTask(task)
+	if err != nil {
+		log.Println(err.Error())
+	}
 	//
-	task.RepeatWithBreak(1*time.Second, func(t *spider.Task) bool {
-		log.Println("repeat do ", t.Request.URL)
-		return t.Page == 20
-	})
+	engine.Run()
+	time.Sleep(3 * time.Second)
+	engine.Stop()
 }
 
-func Next(page int, selection *goquery.Selection) (string, int) {
+func NextURL(page int, selection *goquery.Selection) (string, int) {
 	return "https://www.v2ex.com/recent?p=" + strconv.Itoa(page+1), page + 1
 }
 
-func MapToStruct(selection *goquery.Selection) interface{} {
+func MapToV2ex(selection *goquery.Selection) interface{} {
 	reply, _ := strconv.Atoi(selection.Find("a.count_livid").Text())
 	return &V2ex{
 		Title: selection.Find("span.item_title").Text(),
