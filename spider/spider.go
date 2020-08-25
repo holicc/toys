@@ -4,6 +4,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -28,58 +29,40 @@ type Apply func(selection *goquery.Selection) interface{}
 
 type Sort func(o1, o2 interface{}) int
 
-type Next func(selection goquery.Selection) string
+type Next func(p int, selection *goquery.Selection) (string, int)
 
 type Task struct {
 	Request  *http.Request
 	Response *http.Response
 	//
-	Selection *goquery.Selection
-	Document  *goquery.Document
+	MainSelector string
+	Selection    *goquery.Selection
+	Document     *goquery.Document
 	//
+	Page      int
+	NextURL   Next
 	Pipelines []Pipeline
 	//
 	Values []interface{}
 	//
+	refresh   bool
 	distinct  bool
 	init      bool
 	sorted    bool
-	done      bool
 	functions []func()
+	//
+	done bool
+	dC   chan struct{}
 }
 
 func NewTask(req *http.Request, selector string) (*Task, error) {
-	//
-	t := &Task{
-		Request:   req,
-		Pipelines: make([]Pipeline, 0),
-		functions: make([]func(), 0),
-		init:      false,
-		done:      false,
-	}
-	//
-	t.functions = append(t.functions, func() {
-		initFunc(req, selector, t)
-		t.init = true
-	})
-	return t, nil
-}
-
-func initFunc(req *http.Request, selector string, t *Task) {
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Println("http client request error", err.Error())
-		return
-	}
-	defer response.Body.Close()
-	document, err := goquery.NewDocumentFromReader(response.Body)
-	if err != nil {
-		log.Println("go query document reader failed", err.Error())
-		return
-	}
-	selection := document.Find(selector)
-	t.Response = response
-	t.Selection = selection
+	return &Task{
+		Request:      req,
+		Pipelines:    make([]Pipeline, 0),
+		functions:    make([]func(), 0),
+		MainSelector: selector,
+		dC:           make(chan struct{}, 1),
+	}, nil
 }
 
 func (t *Task) Distinct(key Key) {
@@ -110,8 +93,7 @@ func (t *Task) Filter(filter Filter) {
 func (t *Task) Map(apply Apply) {
 	t.functions = append(t.functions, func() {
 		t.Selection.Each(func(i int, selection *goquery.Selection) {
-			v := apply(selection)
-			t.Values = append(t.Values, v)
+			t.Values = append(t.Values, apply(selection))
 		})
 	})
 }
@@ -120,11 +102,12 @@ func (t *Task) Collect() []interface{} {
 	if t.done {
 		return t.Values
 	} else {
-		t.done = true
 		//do function
 		t.doFunc()
 		//active pipeline after all functions
 		t.activePipelines()
+		//
+		t.finish()
 		//
 		return t.Values
 	}
@@ -168,9 +151,20 @@ func (t *Task) RepeatWithBreak(duration time.Duration, f func(t *Task) bool) {
 			//
 			t.doFunc()
 			go t.activePipelines()
+			//
 		}
+		t.finish()
 	}()
+}
+
+func (t *Task) Wait() {
+	<-t.dC
+}
+
+func (t *Task) finish() {
 	t.done = true
+	t.dC <- struct{}{}
+	close(t.dC)
 }
 
 func (t *Task) activePipelines() {
@@ -182,16 +176,41 @@ func (t *Task) activePipelines() {
 }
 
 func (t *Task) doFunc() {
-	//remove init function
-	if t.init {
-		t.functions = t.functions[1:]
-		t.init = false
+	//
+	if !t.init {
+		t.fetchSource()
 	}
+	//
 	for _, f := range t.functions {
 		f()
 	}
+	if !t.done {
+		if nextURL, page := t.NextURL(t.Page, t.Selection); nextURL != "" {
+			parse, err := url.Parse(nextURL)
+			if err != nil {
+				return
+			}
+			t.Page = page
+			t.Request.URL = parse
+			t.init = false
+		}
+	}
 }
 
-func (t *Task) Next(next Next) {
-	//TODO reset request and send again
+func (t *Task) fetchSource() {
+	response, err := http.DefaultClient.Do(t.Request)
+	if err != nil {
+		log.Println("http client request error", err.Error())
+		return
+	}
+	defer response.Body.Close()
+	document, err := goquery.NewDocumentFromReader(response.Body)
+	if err != nil {
+		log.Println("go query document reader failed", err.Error())
+		return
+	}
+	selection := document.Find(t.MainSelector)
+	t.Response = response
+	t.Selection = selection
+	t.init = true
 }

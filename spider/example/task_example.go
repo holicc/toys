@@ -16,28 +16,36 @@ type V2ex struct {
 }
 
 func main() {
-	req, _ := http.NewRequest("GET", "https://www.v2ex.com/?tab=hot", nil)
+	req, _ := http.NewRequest("GET", "https://www.v2ex.com/recent", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  "PB3_SESSION",
+		Value: "2|1:0|10:1598230663|11:PB3_SESSION|40:djJleDoxMTguMTE0LjI1My4xNDE6MzU5NzA1NDI=|abe2637893e203ff4d7cf57ef4894c6bf854a3345065b0b203fe7bb8bf1bb49e",
+	})
+	req.AddCookie(&http.Cookie{
+		Name:  "V2EX_LANG",
+		Value: "zhcn",
+	})
+	req.AddCookie(&http.Cookie{
+		Name:  "A2",
+		Value: "2|1:0|10:1596016506|2:A2|56:YTMwMDU4ODNlYjFkYmQzODU3MWVkZWIzNzQ5OTkzNmYzN2FjNzViZA==|9adc5fb9f8d7960db311fb11b0ed1cce63efa9fdd71d47850c9698342d994e4f",
+	})
 	task, _ := spider.NewTask(req, "div.item")
+	//
+	task.NextURL = Next
+	//
 	task.Map(MapToStruct)
-	task.Filter(FilterByReply)
-	task.Sort(SortByReply)
 	task.Pipeline(spider.DefaultPipeline)
-	task.Distinct(Key)
-	task.Next(Next)
 	//
 	task.RepeatWithBreak(1*time.Second, func(t *spider.Task) bool {
-		log.Println("repeat do.")
-		return len(t.Values) > 30
+		log.Println("repeat do ", t.Request.URL)
+		return t.Page == 20
 	})
-	//
-	//fmt.Println(task.Collect())
 
-	time.Sleep(100 * time.Second)
+	task.Wait()
 }
 
-func Next(selection goquery.Selection) string {
-
-	return "https://www.v2ex.com/recent?p=3"
+func Next(page int, selection *goquery.Selection) (string, int) {
+	return "https://www.v2ex.com/recent?p=" + strconv.Itoa(page+1), page + 1
 }
 
 func MapToStruct(selection *goquery.Selection) interface{} {
@@ -47,25 +55,4 @@ func MapToStruct(selection *goquery.Selection) interface{} {
 		Link:  selection.Find("span.item_title > a").AttrOr("href", ""),
 		Reply: reply,
 	}
-}
-
-func FilterByReply(v2ex interface{}) bool {
-	v := v2ex.(*V2ex)
-	return v.Reply >= 20
-}
-
-func SortByReply(o1, o2 interface{}) int {
-	a := o1.(*V2ex)
-	b := o2.(*V2ex)
-	if a.Reply > b.Reply {
-		return 1
-	} else if a.Reply < b.Reply {
-		return -1
-	} else {
-		return 0
-	}
-}
-
-func Key(o interface{}) string {
-	return o.(*V2ex).Title
 }
