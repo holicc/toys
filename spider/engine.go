@@ -15,18 +15,18 @@ type Engine struct {
 }
 
 func (e *Engine) Run() {
-	go func() {
-		for {
-			select {
-			case <-e.done:
-				return
-			case t := <-e.tChan:
+	for {
+		select {
+		case <-e.done:
+			return
+		case t, ok := <-e.tChan:
+			if ok {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
 					//TODO return error
 					//finish one task
-					if t.process() {
+					if err := t.process(); err == nil {
 						//try get next task
 						if nextURL, i := t.NextURL(t.Page, t.Selection); nextURL != "" && i > t.Page {
 							parse, err := url.Parse(nextURL)
@@ -45,19 +45,20 @@ func (e *Engine) Run() {
 								}
 							}
 						}
+					} else {
+						log.Println(err.Error())
 					}
 				}()
 			}
 		}
-	}()
+	}
 }
 
 //waiting task done and stop engine
 func (e *Engine) Stop() {
 	//
-	close(e.tChan)
-	//
 	wg.Wait()
+	close(e.tChan)
 	//
 	e.done <- struct{}{}
 	close(e.done)

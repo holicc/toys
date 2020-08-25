@@ -116,12 +116,7 @@ func (t *Task) Collect() []interface{} {
 	if t.done {
 		return t.Values
 	} else {
-		//do function
-		t.doFunc()
-		//active pipeline after all functions
-		t.activePipelines()
-		//
-		t.finish()
+		t.process()
 		//
 		return t.Values
 	}
@@ -146,17 +141,23 @@ func (t *Task) RepeatWithBreak(duration time.Duration, f func(t *Task) bool) {
 	}()
 }
 
-func (t *Task) process() bool {
+func (t *Task) process() error {
 	//
-	t.fetchSource()
+	err := t.fetchSource()
+	if err != nil {
+		return err
+	}
 	//
-	t.doFunc()
+	err = t.doFunc()
+	if err != nil {
+		return err
+	}
 	//
 	go t.activePipelines()
 	//
 	t.finish()
 	//
-	return t.done
+	return nil
 }
 
 func (t *Task) finish() {
@@ -171,7 +172,7 @@ func (t *Task) activePipelines() {
 	}
 }
 
-func (t *Task) doFunc() {
+func (t *Task) doFunc() error {
 	//
 	for _, f := range t.functions {
 		f()
@@ -180,27 +181,29 @@ func (t *Task) doFunc() {
 		if nextURL, page := t.NextURL(t.Page, t.Selection); nextURL != "" {
 			parse, err := url.Parse(nextURL)
 			if err != nil {
-				return
+				return err
 			}
 			t.Page = page
 			t.Request.URL = parse
 		}
 	}
+	return nil
 }
 
-func (t *Task) fetchSource() {
+func (t *Task) fetchSource() error {
 	response, err := http.DefaultClient.Do(t.Request)
 	if err != nil {
 		log.Println("http client request error", err.Error())
-		return
+		return err
 	}
 	defer response.Body.Close()
 	document, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
 		log.Println("go query document reader failed", err.Error())
-		return
+		return err
 	}
 	selection := document.Find(t.MainSelector)
 	t.Response = response
 	t.Selection = selection
+	return nil
 }

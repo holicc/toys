@@ -41,9 +41,11 @@ func main() {
 		log.Println(err.Error())
 	}
 	//
+	go func() {
+		time.Sleep(10 * time.Second)
+		engine.Stop()
+	}()
 	engine.Run()
-	time.Sleep(3 * time.Second)
-	engine.Stop()
 }
 
 func NextURL(page int, selection *goquery.Selection) (string, int) {
