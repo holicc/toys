@@ -4,7 +4,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"log"
 	"net/http"
-	"time"
 )
 
 var DefaultPipeline = &ConsolePipeline{}
@@ -121,25 +120,6 @@ func (t *Task) Collect() []interface{} {
 	}
 }
 
-func (t *Task) RepeatWithBreak(duration time.Duration, f func(t *Task) bool) {
-	if t.done {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(duration)
-		for {
-			<-ticker.C
-			if f(t) {
-				log.Println("break.")
-				break
-			}
-			//
-			t.process()
-			//
-		}
-	}()
-}
-
 func (t *Task) process() error {
 	//
 	err := t.fetchSource()
@@ -166,7 +146,6 @@ func (t *Task) finish() {
 func (t *Task) activePipelines() {
 	for i := range t.Pipelines {
 		pipeline := t.Pipelines[i]
-		//TODO copy values
 		go pipeline.Process(t.Values)
 	}
 }

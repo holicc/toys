@@ -41,10 +41,12 @@ func main() {
 	}
 	//
 	engine.Run()
-	engine.Stop()
 }
 
 func NextURL(page int, selection *goquery.Selection) (string, int) {
+	if page >= 10 {
+		return "", -1
+	}
 	return "https://www.v2ex.com/recent?p=" + strconv.Itoa(page+1), page + 1
 }
 
