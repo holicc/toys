@@ -167,7 +167,7 @@ func (t *Task) activePipelines() {
 	for i := range t.Pipelines {
 		pipeline := t.Pipelines[i]
 		//TODO copy values
-		pipeline.Process(t.Values)
+		go pipeline.Process(t.Values)
 	}
 }
 
