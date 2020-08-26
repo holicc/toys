@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"spider"
 	"strconv"
-	"time"
 )
 
 type V2ex struct {
@@ -21,7 +20,7 @@ func main() {
 	req, _ := http.NewRequest("GET", "https://www.v2ex.com/recent", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  "PB3_SESSION",
-		Value: "",
+		Value: "2|1:0|10:1598230663|11:PB3_SESSION|40:djJleDoxMTguMTE0LjI1My4xNDE6MzU5NzA1NDI=|abe2637893e203ff4d7cf57ef4894c6bf854a3345065b0b203fe7bb8bf1bb49e",
 	})
 	req.AddCookie(&http.Cookie{
 		Name:  "V2EX_LANG",
@@ -29,7 +28,7 @@ func main() {
 	})
 	req.AddCookie(&http.Cookie{
 		Name:  "A2",
-		Value: "",
+		Value: "2|1:0|10:1596016506|2:A2|56:YTMwMDU4ODNlYjFkYmQzODU3MWVkZWIzNzQ5OTkzNmYzN2FjNzViZA==|9adc5fb9f8d7960db311fb11b0ed1cce63efa9fdd71d47850c9698342d994e4f",
 	})
 	task, _ := spider.NewTask(req, "div.item")
 	//
@@ -41,11 +40,8 @@ func main() {
 		log.Println(err.Error())
 	}
 	//
-	go func() {
-		time.Sleep(10 * time.Second)
-		engine.Stop()
-	}()
 	engine.Run()
+	engine.Stop()
 }
 
 func NextURL(page int, selection *goquery.Selection) (string, int) {

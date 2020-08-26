@@ -4,7 +4,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"log"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -47,14 +46,14 @@ type Task struct {
 	//
 	done bool
 	//
-	functions []func()
+	functions []func(t *Task)
 }
 
 func NewTask(req *http.Request, selector string) (*Task, error) {
 	return &Task{
 		Request:      req,
 		Pipelines:    make([]Pipeline, 0),
-		functions:    make([]func(), 0),
+		functions:    make([]func(t *Task), 0),
 		MainSelector: selector,
 	}, nil
 }
@@ -73,21 +72,21 @@ func (t *Task) Distinct(key Key) {
 }
 
 func (t *Task) Filter(filter Filter) {
-	t.functions = append(t.functions, func() {
+	t.functions = append(t.functions, func(self *Task) {
 		val := make([]interface{}, 0)
-		for _, i := range t.Values {
+		for _, i := range self.Values {
 			if filter(i) {
 				val = append(val, i)
 			}
 		}
-		t.Values = val
+		self.Values = val
 	})
 }
 
 func (t *Task) Map(apply Apply) {
-	t.functions = append(t.functions, func() {
-		t.Selection.Each(func(i int, selection *goquery.Selection) {
-			t.Values = append(t.Values, apply(selection))
+	t.functions = append(t.functions, func(self *Task) {
+		self.Selection.Each(func(i int, selection *goquery.Selection) {
+			self.Values = append(self.Values, apply(selection))
 		})
 	})
 }
@@ -97,8 +96,8 @@ func (t *Task) Pipeline(p Pipeline) {
 }
 
 func (t *Task) Sort(sort Sort) {
-	t.functions = append(t.functions, func() {
-		values := t.Values
+	t.functions = append(t.functions, func(self *Task) {
+		values := self.Values
 		//TODO improvement
 		for i := range values {
 			for j := i + 1; j < len(values); j++ {
@@ -153,7 +152,7 @@ func (t *Task) process() error {
 		return err
 	}
 	//
-	go t.activePipelines()
+	t.activePipelines()
 	//
 	t.finish()
 	//
@@ -168,29 +167,20 @@ func (t *Task) activePipelines() {
 	for i := range t.Pipelines {
 		pipeline := t.Pipelines[i]
 		//TODO copy values
-		go pipeline.Process(t.Values)
+		pipeline.Process(t.Values)
 	}
 }
 
 func (t *Task) doFunc() error {
 	//
 	for _, f := range t.functions {
-		f()
-	}
-	if !t.done {
-		if nextURL, page := t.NextURL(t.Page, t.Selection); nextURL != "" {
-			parse, err := url.Parse(nextURL)
-			if err != nil {
-				return err
-			}
-			t.Page = page
-			t.Request.URL = parse
-		}
+		f(t)
 	}
 	return nil
 }
 
 func (t *Task) fetchSource() error {
+	log.Println("URL===>", t.Request.URL)
 	response, err := http.DefaultClient.Do(t.Request)
 	if err != nil {
 		log.Println("http client request error", err.Error())

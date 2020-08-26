@@ -21,10 +21,10 @@ func (e *Engine) Run() {
 			return
 		case t, ok := <-e.tChan:
 			if ok {
-				wg.Add(1)
+				log.Println("=============>", len(t.functions))
 				go func() {
+					wg.Add(1)
 					defer wg.Done()
-					//TODO return error
 					//finish one task
 					if err := t.process(); err == nil {
 						//try get next task
@@ -35,13 +35,14 @@ func (e *Engine) Run() {
 							} else {
 								//wrap to new task
 								t.Request.URL = parse
-								e.tChan <- &Task{
-									Request:      t.Request,
-									MainSelector: t.MainSelector,
-									functions:    t.functions,
-									NextURL:      t.NextURL,
-									Pipelines:    t.Pipelines,
-									Page:         t.Page,
+								newTask, _ := NewTask(t.Request, t.MainSelector)
+								newTask.Page = t.Page + 1
+								newTask.Pipelines = t.Pipelines
+								newTask.functions = t.functions
+								newTask.NextURL = t.NextURL
+								err = e.AddTask(newTask)
+								if err != nil {
+									log.Println(err.Error())
 								}
 							}
 						}
