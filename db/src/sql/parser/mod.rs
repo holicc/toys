@@ -1,5 +1,6 @@
-mod lexer;
-mod keyword;
+pub mod lexer;
+pub mod keyword;
+pub mod ast;
 
-mod tests;
+mod test;
 

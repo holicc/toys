@@ -2,6 +2,8 @@ use std::io;
 use std::io::Write;
 use std::process::exit;
 
+use db::sql::executor::Executor;
+
 enum FLAG {
     EXIT,
     HELP,
@@ -14,8 +16,8 @@ struct Repl {
 }
 
 fn main() {
-    //TODO engine server
-
+    //
+    let exec = Executor::new();
     //
     let mut repl = Repl::new();
     loop {
@@ -26,18 +28,10 @@ fn main() {
                 exit(0);
             }
             FLAG::HELP => {
-                repl.print("help message here. \n");
+                repl.print("This is fake database not need help! \n");
             }
             FLAG::QUERY(query) => {
-                if query.starts_with("select") {
-                    repl.print("do select operation \n");
-                } else if query.starts_with("insert") {
-                    repl.print("do insert operation \n");
-                } else {
-                    //TODO BUG display bug
-                    //eg: ' recognized keyword at start of 'sasd
-                    repl.print(format!("Unrecognized keyword at start of '{}' \n", query.as_str()).as_str())
-                }
+                exec.execute(query)
             }
         }
     }
