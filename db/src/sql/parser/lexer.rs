@@ -51,7 +51,7 @@ impl<'a> Lexer<'a> {
             Some('\'') => self.scan_string(),
             Some(c) if c.is_digit(10) => Ok(self.scan_num()),
             Some(c) if c.is_alphabetic() => Ok(self.scan_keyword()),
-            Some(_) => self.scan_symbol(),
+            Some(_) => Ok(None),
             None => Ok(None),
         }
     }
@@ -77,19 +77,14 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan_num(&mut self) -> Option<Token> {
-        let a: String = self.iter.peek()
-            .iter()
-            .map(|c| **c)
-            .take_while(|x|
-                (*x) == '+' || (*x) == '-' || (*x) == '.' || x.is_digit(10)
-            )
-            .collect();
-
+        let mut a = String::new();
+        while let Some(c) = self.iter.next() {
+            if !c.is_digit(10) {
+                break;
+            }
+            a.push(c);
+        }
         Some(Token::Number(a))
-    }
-
-    fn scan_symbol(&mut self) -> Result<Option<Token>> {
-        unimplemented!()
     }
 
     fn scan_keyword(&mut self) -> Option<Token> {
