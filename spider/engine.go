@@ -27,9 +27,9 @@ func (e *Engine) Run() {
 				go func() {
 					wg.Add(1)
 					defer wg.Done()
-					//finish one task
+					// finish one task
 					if err := t.process(); err == nil {
-						//try get next task
+						// try get next task
 						if nextURL, i := t.NextURL(t.Page, t.Selection); nextURL != "" {
 							parse, err := url.Parse(nextURL)
 							if err != nil {

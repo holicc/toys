@@ -9,9 +9,9 @@ import (
 )
 
 type V2ex struct {
-	Title string
-	Link  string
-	Reply int
+	Title string `selector:""`
+	Link  string `selector:""`
+	Reply int    `selector:""`
 }
 
 func main() {
