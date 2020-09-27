@@ -36,25 +36,24 @@ type Chunk struct {
 	Done  bool
 }
 
-func NewHTTPDownloader(url string, chunkSize int) (*HTTPDownloader, error) {
+func NewHTTPDownloader(url string, chunkSize int, limit int64) (*HTTPDownloader, error) {
 	d := &HTTPDownloader{
 		URL:       url,
 		ChunkSize: chunkSize,
 		Chunks:    make([]Chunk, chunkSize),
 		FileInfo: &FileInfo{
-			Limit: 5 * 1024,
+			Limit: limit,
 		},
 	}
 	if err := getFileInfo(d); err != nil {
 		return nil, err
 	}
-	if err := getFromTempFile(d.FileInfo.FilePath+CONFIG_FILE_SUFFIX, d); err == nil {
+	if err := getFromTempFile(d.FileInfo.FileName, d); err == nil {
 		return d, nil
 	}
 	d.initChunks(chunkSize)
-	d.FileInfo.writeCache(d)
 
-	return d, nil
+	return d, d.FileInfo.writeCache(d)
 }
 
 func (d *HTTPDownloader) Download() error {
@@ -81,19 +80,28 @@ func (d *HTTPDownloader) Download() error {
 		}
 	}()
 	if d.SupportRange {
-		channel := make(chan *Chunk, d.ChunkSize)
-		go d.doProcess(channel)
 		for i := range d.Chunks {
 			c := &d.Chunks[i]
 			if !c.Done {
 				wg.Add(1)
-				channel <- c
+				go func() {
+					defer wg.Done()
+					if err := d.downloadChunk(c); err != nil {
+						log.Printf("download chunk error:%v", err)
+					}
+				}()
 			}
 		}
 		wg.Wait()
-		close(channel)
+
+		d.FileInfo.OriginalFile.Close()
 		d.FileInfo.TempFile.Close()
+
 		err := os.Rename(d.FileInfo.FilePath+TEMP_FILE_SUFFIX, d.FileInfo.FilePath)
+		if err != nil {
+			return err
+		}
+		err = os.Remove(getTempFilePath(d.FileInfo.FileName))
 		if err != nil {
 			return err
 		}
@@ -134,21 +142,6 @@ func (d *HTTPDownloader) normalDownload() error {
 	return nil
 }
 
-func (d *HTTPDownloader) doProcess(channel chan *Chunk) {
-	for {
-		if c, ok := <-channel; ok {
-			go func(c *Chunk) {
-				defer wg.Done()
-				if err := d.downloadChunk(c); err != nil {
-					log.Printf("download chunk error:%v", err)
-				}
-			}(c)
-		} else {
-			break
-		}
-	}
-}
-
 func (d *HTTPDownloader) initChunks(chunkSize int) {
 	pieces := d.FileInfo.TotalSize / chunkSize
 	for i := range d.Chunks {
@@ -174,6 +167,8 @@ func (d *HTTPDownloader) downloadChunk(c *Chunk) error {
 		return err
 	}
 	defer response.Body.Close()
+
+	index := c.From
 	for {
 		bytes := make([]byte, d.FileInfo.Limit)
 		read, err := response.Body.Read(bytes)
@@ -181,11 +176,12 @@ func (d *HTTPDownloader) downloadChunk(c *Chunk) error {
 			log.Printf("[%d] Chunk Done...", c.Index)
 			break
 		}
-		write, err := d.FileInfo.OriginalFile.WriteAt(bytes, c.From)
+		write, err := d.FileInfo.OriginalFile.WriteAt(bytes, index)
 		if err != nil || write <= 0 {
 			log.Printf("write file error:%v", err)
 			return err
 		}
+		index += int64(write)
 		atomic.AddInt64(&d.FileInfo.Downloaded, int64(write))
 	}
 	c.Done = true
@@ -201,12 +197,15 @@ func getFileInfo(d *HTTPDownloader) (err error) {
 	if err != nil {
 		return
 	}
+
 	d.SupportRange = r.Header.Get("Accept-Ranges") == "bytes"
 	d.FileInfo.TotalSize, _ = strconv.Atoi(r.Header.Get("Content-Length"))
 	d.ETag = r.Header.Get("ETag")
 	d.LastModify, _ = time.Parse(http.TimeFormat, r.Header.Get("Last-Modified"))
+
+	// resolve duplicate file name
 	filename, extension := parseFileInfoFrom(r)
-	path := filepath.Join(dir, filename+extension)
+	path := filepath.Join(curDir, filename+extension)
 	for {
 		var i int
 		if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -216,9 +215,10 @@ func getFileInfo(d *HTTPDownloader) (err error) {
 		} else {
 			i++
 			filename += fmt.Sprintf(" (%d) ", i+1)
-			path = filepath.Join(dir, filename+fmt.Sprintf(" (%d) ", i+1)+extension)
+			path = filepath.Join(curDir, filename+fmt.Sprintf(" (%d) ", i+1)+extension)
 		}
 	}
+
 	return
 }
 
