@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"net/http"
 )
@@ -31,7 +32,15 @@ type News struct {
 	URL       string `json:"url"`
 }
 
-func GetNews() (*CCTVNews, error) {
+func GetNews(c *gin.Context) {
+	news, err := news()
+	if err != nil {
+		c.JSON(500, err.Error())
+	}
+	c.JSON(200, news)
+}
+
+func news() (*CCTVNews, error) {
 	resp, err := http.Get(URL)
 	if err != nil {
 		return nil, err
