@@ -1,0 +1,8 @@
+module fretboard
+
+go 1.14
+
+require (
+	gopkg.in/music-theory.v0 v0.0.4
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+)

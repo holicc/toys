@@ -42,7 +42,7 @@ func main() {
 		fmt.Println("image exists!")
 	}
 	//
-	wallpaper.SetFromFile(sPath)
+	_ = wallpaper.SetFromFile(sPath)
 }
 
 func storePath(imageName string) string {
